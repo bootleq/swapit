@@ -312,7 +312,15 @@ fun! SwapMatch(swap_list, cur_word, direction, is_visual)
                 let in_visual = 1
                 exec 'norm! maviw"sp`[v`]'
             else
-                exec 'norm! maviw"spb`a'
+                let cword = s:cword()
+                call setline('.',
+                            \    substitute(
+                            \        getline('.'),
+                            \        '\%' . s:cword["col"] . 'c' . a:cur_word,
+                            \        next_word,
+                            \        ''
+                            \    )
+                            \ )
             endif
         endif
     endif
@@ -380,6 +388,58 @@ fun! ShowSwapChoices(match_list, cur_word, direction, is_visual)
         call SwapMatch(a:match_list[choice -1], a:cur_word, a:direction, a:is_visual)
     else
         echo "Swap: Cancelled"
+    endif
+endfun
+"Cursor, line, register utils {{{1
+"
+" s:cword:
+" - must contain the character under cursor.
+" - has text and col (start column) attributes.
+fun! s:cword()
+    let cword = expand('<cword>')
+    let cchar = s:cchar()
+    let cpos = s:cpos()
+    let s:cword = {
+                \     "text": '',
+                \     "col": 0,
+                \ }
+
+    if match(cword, cchar) >= 0
+        let s:cword["col"] = match(
+                    \     getline('.'),
+                    \      '\%>' . (cpos["col"] - strlen(cword) - 1) . 'c' . cword,
+                    \     0,
+                    \     0
+                    \ ) + 1
+        let s:cword["text"] = cword
+    endif
+    return s:cword
+endfun
+
+fun! s:cchar()
+    call s:save_reg('a')
+    normal yl
+    let cchar = @a
+    call s:restore_reg('a')
+    return cchar
+endfun
+
+fun! s:cpos()
+    let pos = getpos('.') 
+    let s:cpos = {
+                \   "line": pos[1],
+                \   "col": pos[2],
+                \ }
+    return s:cpos
+endfun
+
+fun! s:save_reg(name)
+    let s:save_reg = [getreg(a:name), getregtype(a:name)]
+endfun
+
+fun! s:restore_reg(name)
+    if exists('s:save_reg')
+        call setreg(a:name, s:save_reg[0], s:save_reg[1])
     endif
 endfun
 "Insert Mode List Handling {{{1
