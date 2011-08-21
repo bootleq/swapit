@@ -407,7 +407,7 @@ fun! s:cword()
     if match(cword, cchar) >= 0
         let s:cword["col"] = match(
                     \     getline('.'),
-                    \      '\%>' . (cpos["col"] - strlen(cword) - 1) . 'c' . cword,
+                    \      '\%>' . max([0, cpos["col"] - strlen(cword) - 1]) . 'c' . cword,
                     \     0,
                     \     0
                     \ ) + 1
