@@ -507,10 +507,9 @@ fun! OpenSwapFileType()
 endfun
 "Default DataSet. Add Generic swap lists here {{{1
 if g:swap_list_dont_append == 'yes'
-
     let g:default_swap_list = []
-
-else
+elseif ! exists('g:default_swap_list')
+    " TODO: use single interface to append lists
     let g:default_swap_list = [
                 \{'name':'yes/no', 'options': ['yes','no']},
                 \{'name':'Yes/No', 'options': ['Yes','No']},
