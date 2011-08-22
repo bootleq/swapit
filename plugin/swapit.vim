@@ -299,29 +299,20 @@ fun! SwapMatch(swap_list, cur_word, direction, is_visual)
         exec "norm lviw\"sp`aviw\"sp"
     " Regular swaps {{{3
     else
+        let ctext = s:ctext(a:is_visual == 'yes')
+        call setline('.',
+                    \    substitute(
+                    \        getline('.'),
+                    \        '\%' . s:ctext["col"] . 'c' . escape(a:cur_word, '~\[^$'),
+                    \        escape(next_word, '~\&'),
+                    \        ''
+                    \    )
+                    \ )
 
-        if a:is_visual == 'yes'
-            if next_word =~ '\W'
-                let in_visual = 1
-                exec 'norm! gv"sp`[v`]'
-            else
-                exec 'norm! gv"spb'
-            endif
-        else
-            if next_word =~ '\W'
-                let in_visual = 1
-                exec 'norm! maviw"sp`[v`]'
-            else
-                let cword = s:cword()
-                call setline('.',
-                            \    substitute(
-                            \        getline('.'),
-                            \        '\%' . s:cword["col"] . 'c' . a:cur_word,
-                            \        next_word,
-                            \        ''
-                            \    )
-                            \ )
-            endif
+        if next_word =~ '\W'
+            call cursor(line('.'), s:ctext["col"])
+            normal v
+            call cursor(line('.'), s:ctext["col"] + strlen(next_word) - 1)
         endif
     endif
     " 3}}}
@@ -392,6 +383,14 @@ fun! ShowSwapChoices(match_list, cur_word, direction, is_visual)
 endfun
 "Cursor, line, register utils {{{1
 "
+fun! s:ctext(visual)
+    if a:visual
+        let s:ctext = s:cvisual()
+    else
+        let s:ctext = s:cword()
+    endif
+    return s:ctext
+endfunction
 " s:cword:
 " - must contain the character under cursor.
 " - has text and col (start column) attributes.
@@ -414,6 +413,24 @@ fun! s:cword()
         let s:cword["text"] = cword
     endif
     return s:cword
+endfun
+
+fun! s:cvisual()
+    let save_mode = mode()
+
+    call s:save_reg('a')
+    normal gv"ay
+    let s:cvisual = {
+                \     "text": @a,
+                \     "col": getpos('v')[2],
+                \ }
+
+    if save_mode == 'v'
+        normal gv
+    endif
+    call s:restore_reg('a')
+
+    return s:cvisual
 endfun
 
 fun! s:cchar()
