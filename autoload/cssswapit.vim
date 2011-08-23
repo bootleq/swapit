@@ -1,4 +1,4 @@
-fun! cssswapit#CssSwapComplete(direction)
+fun! cssswapit#CssSwapComplete(backward)
 
     let column = col(".")
     let line = getline(".")
@@ -13,7 +13,7 @@ fun! cssswapit#CssSwapComplete(direction)
         if index(matches,cur_word) != -1
             let word_index = index(matches, cur_word)
 
-            if a:direction == 'forward'
+            if ! a:backward
                 let word_index = (word_index + 1) % len(matches)
             else
                 let word_index = (word_index - 1) % len(matches)

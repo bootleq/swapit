@@ -173,10 +173,10 @@ endif
 "Command/AutoCommand Configuration {{{1
 "
 " For executing the listing
-nnoremap <silent><c-a> :<c-u>call SwapWord(expand("<cword>"),'forward', 'no')<cr>
-nnoremap <silent><c-x> :<c-u>call SwapWord(expand("<cword>"),'backward','no')<cr>
-vnoremap <silent><c-a> "dy<esc>:call SwapWord(@d,'forward','yes')<cr>
-vnoremap <silent><c-x> "dy<esc>:call SwapWord(@d,'backward','yes')<cr>
+nnoremap <silent><c-a> :<c-u>call SwapIt(0, 'w')<cr>
+nnoremap <silent><c-x> :<c-u>call SwapIt(1, 'w')<cr>
+vnoremap <silent><c-a> :<c-u>call SwapIt(0, 'v')<cr>
+vnoremap <silent><c-x> :<c-u>call SwapIt(1, 'v')<cr>
 "inoremap <silent><c-b> <esc>b"sdwi <c-r>=SwapInsert()<cr>
 "inoremap <expr> <c-b> SwapInsert()
 
@@ -184,21 +184,21 @@ vnoremap <silent><c-x> "dy<esc>:call SwapWord(@d,'backward','yes')<cr>
 com! -nargs=* SwapList call AddSwapList(<q-args>)
 com! ClearSwapList let g:swap_lists = []
 com! SwapIdea call OpenSwapFileType()
-com! -range -nargs=1 SwapWordVisual call SwapWord(getline('.'),<f-args>,'yes')
+" com! -range -nargs=1 SwapWordVisual call SwapIt(<f-args>, 'v')
 "au BufEnter call LoadFileTypeSwapList()
 com! SwapListLoadFT call LoadFileTypeSwapList()
 com! -nargs=+ SwapXmlMatchit call AddSwapXmlMatchit(<q-args>)
 "Swap Processing Functions {{{1
 "
 "
-"SwapWord() main processiong event function {{{2
-fun! SwapWord (word, direction, is_visual)
+"SwapIt() {{{2
+fun! SwapIt(backward, text_class)
 
     let comfunc_result = 0
     "{{{3 css omnicomplete property swapping
     if exists('b:swap_completefunc')
-        exec "let complete_func = " . b:swap_completefunc . "('". a:direction ."')"
-        if ( comfunc_result == 1 )
+        exec "let complete_func = " . b:swap_completefunc . "(". a:backward .")"
+        if comfunc_result
             return 1
         endif
     endif
@@ -209,7 +209,8 @@ fun! SwapWord (word, direction, is_visual)
         let test_lists =  g:swap_lists + g:default_swap_list
     endif
 
-    let cur_word = a:word
+    let cur_word = s:ctext(a:text_class)["text"]
+
     let match_list = []
 
     " Main for loop over each swaplist {{{3
@@ -224,17 +225,17 @@ fun! SwapWord (word, direction, is_visual)
 
     "}}}
 
-    let out =  ProcessMatches(match_list, cur_word , a:direction, a:is_visual)
-    return ''
+    let out = ProcessMatches(match_list, cur_word, a:backward, a:text_class)
+    return
 endfun
 
 "ProcessMatches() handles various result {{{2
-fun! ProcessMatches(match_list, cur_word, direction, is_visual)
+fun! ProcessMatches(match_list, cur_word, backward, text_class)
 
     if len(a:match_list) > 1
         let choice = s:confirm_choices(a:match_list, a:cur_word)
         if choice != 0
-            call SwapMatch(a:match_list[choice - 1], a:cur_word, a:direction, a:is_visual)
+            call SwapMatch(a:match_list[choice - 1], a:cur_word, a:backward, a:text_class)
         else
             echohl WarningMsg | echo "Aborted." | echohl None
         endif
@@ -243,14 +244,14 @@ fun! ProcessMatches(match_list, cur_word, direction, is_visual)
 
     if len(a:match_list) == 1
         let swap_list = a:match_list[0]
-        call SwapMatch(swap_list, a:cur_word, a:direction, a:is_visual)
+        call SwapMatch(swap_list, a:cur_word, a:backward, a:text_class)
         return
     endif
 
-    if a:direction == 'forward'
-        exec "normal \<Plug>SwapItFallbackIncrement"
+    if a:backward
+        execute "normal \<Plug>SwapItFallbackDecrement"
     else
-        exec "normal \<Plug>SwapItFallbackDecrement"
+        execute "normal \<Plug>SwapItFallbackIncrement"
     endif
 
 endfun
@@ -265,15 +266,15 @@ fun! PassThrough(direction)
 endfun
 
 " SwapMatch()  handles match {{{2
-fun! SwapMatch(swap_list, cur_word, direction, is_visual)
+fun! SwapMatch(swap_list, cur_word, backward, text_class)
 
     let word_options = a:swap_list['options']
     let word_index = index(word_options, a:cur_word)
 
-    if a:direction == 'forward'
-        let word_index = ( word_index + 1 ) % len(word_options)
-    else
+    if a:backward
         let word_index = ( word_index - 1 ) % len(word_options)
+    else
+        let word_index = ( word_index + 1 ) % len(word_options)
     endif
 
     let next_word = word_options[word_index]
@@ -300,7 +301,7 @@ fun! SwapMatch(swap_list, cur_word, direction, is_visual)
         exec "norm lviw\"sp`aviw\"sp"
     " Regular swaps {{{3
     else
-        let ctext = s:ctext(a:is_visual == 'yes')
+        let ctext = s:ctext(a:text_class)
         call setline('.',
                     \    substitute(
                     \        getline('.'),
@@ -318,22 +319,7 @@ fun! SwapMatch(swap_list, cur_word, direction, is_visual)
     endif
     " 3}}}
 
-    "TODO VISHACK This is a silly hack to fix the visual range. if the v ends with
-    "a word character the visual range is onw column over but not for
-    "non word characters.
-
-"    if in_visual == 1 && next_word =~ "\\w$" && &selection == 'inclusive'
-"        exec 'norm! h'
-"    endif
-
-"    if in_visual == 1 && (next_word =~  "\\W$") && &selection == 'exclusive'
-"        exec 'norm! l'
-"    endif
-
     let @s = temp_reg
-    "    echo "Swap: " . a:swap_list['name'] .' '. a:cur_word . " > " . next_word
-    "\. ' ' . word_index . ' ' . a:direction . ' ' . len(word_options)
-    return 1
 endfun
 "
 "s:confirm_choices() {{{2
@@ -366,11 +352,16 @@ fun! s:confirm_choices(match_list, cur_word)
 endfun
 "Cursor, line, register utils {{{1
 "
-fun! s:ctext(visual)
-    if a:visual
+fun! s:ctext(text_class)
+    if a:text_class == 'w'
+        let s:ctext = s:cword()
+    elseif a:text_class == 'v'
         let s:ctext = s:cvisual()
     else
-        let s:ctext = s:cword()
+        let s:ctext = {
+                    \     "text": '',
+                    \     "col": 0,
+                    \ }
     endif
     return s:ctext
 endfunction
