@@ -159,6 +159,10 @@ endif
 if !exists('g:swap_list_dont_append')
     let g:swap_list_dont_append = 'no'
 endif
+" TODO: doc this option
+if !exists('g:swapit_max_conflict')
+    let g:swapit_max_conflict = 7
+endif
 if empty(maparg('<Plug>SwapItFallbackIncrement', 'n'))
     nnoremap <Plug>SwapItFallbackIncrement <c-a>
 endif
@@ -227,29 +231,26 @@ endfun
 "ProcessMatches() handles various result {{{2
 fun! ProcessMatches(match_list, cur_word, direction, is_visual)
 
-    if len(a:match_list) == 0
-        if a:direction == 'forward'
-            exec "normal \<Plug>SwapItFallbackIncrement"
+    if len(a:match_list) > 1
+        let choice = s:confirm_choices(a:match_list, a:cur_word)
+        if choice != 0
+            call SwapMatch(a:match_list[choice - 1], a:cur_word, a:direction, a:is_visual)
         else
-            exec "normal \<Plug>SwapItFallbackDecrement"
+            echohl WarningMsg | echo "Aborted." | echohl None
         endif
-        return ''
+        return
     endif
 
     if len(a:match_list) == 1
         let swap_list = a:match_list[0]
         call SwapMatch(swap_list, a:cur_word, a:direction, a:is_visual)
-        return ''
+        return
     endif
 
-    if len(a:match_list) > 7
-        echo "Too many matches for " . a:cur_word . ". "
-        echo a:match_list
-        return ''
-    endif
-
-    if len(a:match_list) > 1
-        call ShowSwapChoices(a:match_list, a:cur_word, a:direction, a:is_visual)
+    if a:direction == 'forward'
+        exec "normal \<Plug>SwapItFallbackIncrement"
+    else
+        exec "normal \<Plug>SwapItFallbackDecrement"
     endif
 
 endfun
@@ -335,51 +336,33 @@ fun! SwapMatch(swap_list, cur_word, direction, is_visual)
     return 1
 endfun
 "
-"ShowSwapChoices() shows alternative swaps {{{2
-fun! ShowSwapChoices(match_list, cur_word, direction, is_visual)
+"s:confirm_choices() {{{2
+fun! s:confirm_choices(match_list, cur_word)
+    let index = 0
+    let candidates = []
+    let choices = []
 
-    let a_opts = ['A','B','C','D','E','F','G']
-    let con_index = 0
-    let confirm_options = ''
-    let confirm_but = ''
+    if len(a:match_list) >= g:swapit_max_conflict
+        redraw
+        echohl WarningMsg | echomsg "Swapit: Too many matches for: '" . a:cur_word . "'" | echohl None
+        return
+    endif
 
-    "Generate the prompt {{{3
-    for swap_list in a:match_list
-        let confirm_options =  confirm_options . ' ' . a_opts[con_index] . " . " . swap_list['name'] . ' (' .
-                    \a:cur_word . ' > ' . swap_list['options'][index(swap_list['options'], a:cur_word) + 1] . ') '
+    for list in a:match_list
 
-        "        For some reason concatenating stuffs up the string, using an
-        "        if con_index > 0
-        "            let confirm_but = confirm_but + '\n'
-        "        endif
-        "        let confirm_but = confirm_but +  "option&". a_opts[con_index]
-
-        let con_index = con_index + 1
+        let mark = nr2char(char2nr('A') + index)
+        call add(candidates, join([
+                    \     ' ' . mark,
+                    \     ') ',
+                    \     list['name'],
+                    \     " => ",
+                    \     list['options'][(index(list['options'], a:cur_word) + 1) % len(list['options'])],
+                    \ ], ''))
+        call add(choices, '&' . mark)
+        let index += 1
     endfor
-    "   }}}
-    "    TODO Prompt  This is a bit inelegant but I'm using it as the second argument of
-    "       confirm wont take a concatenated string (some escape issue). At the moment I just want it
-    "       to work
-    "       {{{3
-    if len(a:match_list) == 2
-        let choice = confirm("Swap Options: " . confirm_options , "&A\n&B" ,  0)
-    elseif len(a:match_list) == 3
-        let choice = confirm("Swap Options: ". confirm_options  , "&A\n&B\n&C" ,  0)
-    elseif len(a:match_list) == 4
-        let choice = confirm("Swap Options: ". confirm_options  , "&A\n&B\n&C\n&D" , 0)
-    elseif len(a:match_list) == 5
-        let choice = confirm("Swap Options: ". confirm_options  , "&A\n&B\n&C\n&D\n&E" ,  0)
-    elseif len(a:match_list) == 6
-        let choice = confirm("Swap Options: ". confirm_options  , "&A\n&B\n&C\n&D\n&E\n&F" , 0)
-    elseif len(a:match_list) == 7
-        let choice = confirm("Swap Options: ". confirm_options  , "&A\n&B\n&C\n&D\n&E\&F\&G" , 0)
-    endif
-    "   }}}
-    if choice != 0
-        call SwapMatch(a:match_list[choice -1], a:cur_word, a:direction, a:is_visual)
-    else
-        echo "Swap: Cancelled"
-    endif
+
+    return confirm("SwapIt with:\n" . join(candidates, "\n"), join(choices, "\n"), 0)
 endfun
 "Cursor, line, register utils {{{1
 "
