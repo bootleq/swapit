@@ -193,6 +193,13 @@ com! -nargs=+ SwapXmlMatchit call AddSwapXmlMatchit(<q-args>)
 "
 "SwapIt() {{{2
 fun! SwapIt(backward, text_class)
+    let s:backward = a:backward
+    let s:text_class = a:text_class
+    let ctext = s:ctext(s:text_class)
+
+    if ctext["col"] == 0
+        call s:fallback(s:backward)
+    endif
 
     let comfunc_result = 0
     "{{{3 css omnicomplete property swapping
@@ -209,128 +216,79 @@ fun! SwapIt(backward, text_class)
         let test_lists =  g:swap_lists + g:default_swap_list
     endif
 
-    let cur_word = s:ctext(a:text_class)["text"]
-
     let match_list = []
 
     " Main for loop over each swaplist {{{3
     for swap_list  in test_lists
         let word_options = swap_list['options']
-        let word_index = index(word_options, cur_word)
+        let word_index = index(word_options, ctext["text"])
 
         if word_index != -1
             call add(match_list, swap_list)
         endif
     endfor
-
     "}}}
 
-    let out = ProcessMatches(match_list, cur_word, a:backward, a:text_class)
-    return
-endfun
-
-"ProcessMatches() handles various result {{{2
-fun! ProcessMatches(match_list, cur_word, backward, text_class)
-
-    if len(a:match_list) > 1
-        let choice = s:confirm_choices(a:match_list, a:cur_word)
-        if choice != 0
-            call SwapMatch(a:match_list[choice - 1], a:cur_word, a:backward, a:text_class)
+    if len(match_list) > 1
+        let choice = s:confirm_choices(match_list, ctext)
+        if choice
+            call s:cycle(match_list[choice - 1], ctext)
         else
             echohl WarningMsg | echo "Aborted." | echohl None
         endif
-        return
-    endif
-
-    if len(a:match_list) == 1
-        let swap_list = a:match_list[0]
-        call SwapMatch(swap_list, a:cur_word, a:backward, a:text_class)
-        return
-    endif
-
-    if a:backward
-        execute "normal \<Plug>SwapItFallbackDecrement"
+    elseif len(match_list) == 1
+        let swap_list = match_list[0]
+        call s:cycle(swap_list, ctext)
     else
-        execute "normal \<Plug>SwapItFallbackIncrement"
-    endif
-
-endfun
-"PassThrough() handles no match event {{{2
-fun! PassThrough(direction)
-    ""echo "Swap: No match for " . cur_word
-    if a:direction == 'forward'
-        exec "normal! \<Plug>SwapItFallbackIncrement"
-    else
-        exec "normal! \<Plug>SwapItFallbackDecrement"
+        call s:fallback(a:backward)
     endif
 endfun
-
-" SwapMatch()  handles match {{{2
-fun! SwapMatch(swap_list, cur_word, backward, text_class)
-
-    let word_options = a:swap_list['options']
-    let word_index = index(word_options, a:cur_word)
-
-    if a:backward
-        let word_index = ( word_index - 1 ) % len(word_options)
-    else
-        let word_index = ( word_index + 1 ) % len(word_options)
-    endif
-
-    let next_word = word_options[word_index]
-
-    let temp_reg = @s
-    let @s = next_word
-    let in_visual = 0
+" s:cycle()  cycle options in list {{{2
+fun! s:cycle(swap_list, ctext)
+    let candidates = a:swap_list["options"]
+    let new_index = index(candidates, a:ctext["text"]) + (s:backward ? -1 : 1)
+    let new_index = new_index % len(candidates)
+    let new_word = a:swap_list["options"][new_index]
 
     "XML matchit handling  {{{3
     if index(g:swap_xml_matchit, a:swap_list['name']) != -1
-
-        if match(getline("."),"<\\(\\/".a:cur_word."\\|".a:cur_word."\\)[^>]*>" ) == -1
+        " TODO: maybe use searchpair() instead of matchit
+        " TODO: use substitute() instead of ciw
+        " TODO: don't change 'a' mark
+        if match(getline("."),"<\\(\\/". a:ctext["text"] ."\\|". a:ctext["text"] ."\\)[^>]*>" ) == -1
             return 0
         endif
-
-        exec "norm T<ma%"
-
-        "If the cursor is on a / then jump to the front and mark
-
-        if getline(".")[col(".") -1] != "/"
-            exec "norm ma%"
-        endif
-
-        exec "norm lviw\"sp`aviw\"sp"
+        execute "normal T<ma%"
+        execute "normal l\"_ciw\<C-R>=new_word\<CR>`aciw\<C-R>=new_word\<CR>"
     " Regular swaps {{{3
     else
-        let ctext = s:ctext(a:text_class)
         call setline('.',
                     \    substitute(
                     \        getline('.'),
-                    \        '\%' . s:ctext["col"] . 'c' . escape(a:cur_word, '~\[^$'),
-                    \        escape(next_word, '~\&'),
+                    \        '\%' . a:ctext["col"] . 'c' . escape(a:ctext["text"], '~\[^$'),
+                    \        escape(new_word, '~\&'),
                     \        ''
                     \    )
                     \ )
 
-        if next_word =~ '\W'
-            call cursor(line('.'), s:ctext["col"])
+        if new_word =~ '\W'
+            call cursor(line('.'), a:ctext["col"])
             normal v
-            call cursor(line('.'), s:ctext["col"] + strlen(next_word) - 1)
+            call cursor(line('.'), a:ctext["col"] + strlen(new_word) - 1)
         endif
     endif
     " 3}}}
-
-    let @s = temp_reg
 endfun
 "
 "s:confirm_choices() {{{2
-fun! s:confirm_choices(match_list, cur_word)
+fun! s:confirm_choices(match_list, ctext)
     let index = 0
     let candidates = []
     let choices = []
 
     if len(a:match_list) >= g:swapit_max_conflict
         redraw
-        echohl WarningMsg | echomsg "Swapit: Too many matches for: '" . a:cur_word . "'" | echohl None
+        echohl WarningMsg | echomsg "Swapit: Too many matches for: '" . a:ctext["text"] . "'" | echohl None
         return
     endif
 
@@ -342,13 +300,22 @@ fun! s:confirm_choices(match_list, cur_word)
                     \     ') ',
                     \     list['name'],
                     \     " => ",
-                    \     list['options'][(index(list['options'], a:cur_word) + 1) % len(list['options'])],
+                    \     list['options'][(index(list['options'], a:ctext["text"]) + 1) % len(list['options'])],
                     \ ], ''))
         call add(choices, '&' . mark)
         let index += 1
     endfor
 
     return confirm("SwapIt with:\n" . join(candidates, "\n"), join(choices, "\n"), 0)
+endfun
+
+fun! s:fallback(backward)
+    " TODO: is this works for visual mode?
+    if s:backward
+        execute "normal \<Plug>SwapItFallbackDecrement"
+    else
+        execute "normal \<Plug>SwapItFallbackIncrement"
+    endif
 endfun
 "Cursor, line, register utils {{{1
 "
