@@ -173,10 +173,10 @@ endif
 "Command/AutoCommand Configuration {{{1
 "
 " For executing the listing
-nnoremap <silent><c-a> :<c-u>call SwapIt(0, 'w')<cr>
-nnoremap <silent><c-x> :<c-u>call SwapIt(1, 'w')<cr>
-vnoremap <silent><c-a> :<c-u>call SwapIt(0, 'v')<cr>
-vnoremap <silent><c-x> :<c-u>call SwapIt(1, 'v')<cr>
+nnoremap <silent><c-a> :<c-u>call SwapIt('w', 0, v:count1)<cr>
+nnoremap <silent><c-x> :<c-u>call SwapIt('w', 1, v:count1)<cr>
+vnoremap <silent><c-a> :<c-u>call SwapIt('v', 0, v:count1)<cr>
+vnoremap <silent><c-x> :<c-u>call SwapIt('v', 1, v:count1)<cr>
 "inoremap <silent><c-b> <esc>b"sdwi <c-r>=SwapInsert()<cr>
 "inoremap <expr> <c-b> SwapInsert()
 
@@ -184,7 +184,7 @@ vnoremap <silent><c-x> :<c-u>call SwapIt(1, 'v')<cr>
 com! -nargs=* SwapList call AddSwapList(<q-args>)
 com! ClearSwapList let g:swap_lists = []
 com! SwapIdea call OpenSwapFileType()
-" com! -range -nargs=1 SwapWordVisual call SwapIt(<f-args>, 'v')
+" com! -range -nargs=1 SwapWordVisual call SwapIt('v', <f-args>, v:count1)
 "au BufEnter call LoadFileTypeSwapList()
 com! SwapListLoadFT call LoadFileTypeSwapList()
 com! -nargs=+ SwapXmlMatchit call AddSwapXmlMatchit(<q-args>)
@@ -192,13 +192,13 @@ com! -nargs=+ SwapXmlMatchit call AddSwapXmlMatchit(<q-args>)
 "
 "
 "SwapIt() {{{2
-fun! SwapIt(backward, text_class)
+fun! SwapIt(text_class, backward, count)
     let s:backward = a:backward
     let s:text_class = a:text_class
     let ctext = s:ctext(s:text_class)
 
     if ctext["col"] == 0
-        call s:fallback(s:backward)
+        call s:fallback(s:backward, a:count)
     endif
 
     let comfunc_result = 0
@@ -232,21 +232,21 @@ fun! SwapIt(backward, text_class)
     if len(match_list) > 1
         let choice = s:confirm_choices(match_list, ctext)
         if choice
-            call s:cycle(match_list[choice - 1], ctext)
+            call s:cycle(match_list[choice - 1], ctext, a:count)
         else
             echohl WarningMsg | echo "Aborted." | echohl None
         endif
     elseif len(match_list) == 1
         let swap_list = match_list[0]
-        call s:cycle(swap_list, ctext)
+        call s:cycle(swap_list, ctext, a:count)
     else
-        call s:fallback(a:backward)
+        call s:fallback(a:backward, a:count)
     endif
 endfun
 " s:cycle()  cycle options in list {{{2
-fun! s:cycle(swap_list, ctext)
+fun! s:cycle(swap_list, ctext, count)
     let candidates = a:swap_list["options"]
-    let new_index = index(candidates, a:ctext["text"]) + (s:backward ? -1 : 1)
+    let new_index = index(candidates, a:ctext["text"]) + (s:backward ? -1 : 1) * a:count
     let new_index = new_index % len(candidates)
     let new_word = a:swap_list["options"][new_index]
 
@@ -309,12 +309,12 @@ fun! s:confirm_choices(match_list, ctext)
     return confirm("SwapIt with:\n" . join(candidates, "\n"), join(choices, "\n"), 0)
 endfun
 
-fun! s:fallback(backward)
+fun! s:fallback(backward, count)
     " TODO: is this works for visual mode?
     if s:backward
-        execute "normal \<Plug>SwapItFallbackDecrement"
+        execute "normal " . a:count . "\<Plug>SwapItFallbackDecrement"
     else
-        execute "normal \<Plug>SwapItFallbackIncrement"
+        execute "normal " . a:count . "\<Plug>SwapItFallbackIncrement"
     endif
 endfun
 "Cursor, line, register utils {{{1
