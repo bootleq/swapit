@@ -156,6 +156,9 @@ let g:swap_xml_matchit = []
 if !exists('g:swap_lists')
     let g:swap_lists = []
 endif
+if !exists('g:swapit_no_mappings')
+    let g:swapit_no_mappings = 0
+endif
 if !exists('g:swap_list_dont_append')
     let g:swap_list_dont_append = 'no'
 endif
@@ -172,11 +175,16 @@ endif
 
 "Command/AutoCommand Configuration {{{1
 "
-" For executing the listing
-nnoremap <silent><c-a> :<c-u>call SwapIt('w', 0, v:count1)<cr>
-nnoremap <silent><c-x> :<c-u>call SwapIt('w', 1, v:count1)<cr>
-vnoremap <silent><c-a> :<c-u>call SwapIt('v', 0, v:count1)<cr>
-vnoremap <silent><c-x> :<c-u>call SwapIt('v', 1, v:count1)<cr>
+nnoremap <silent> <Plug>SwapItNext :<C-U>call SwapIt('w', 0, v:count1)<CR>
+nnoremap <silent> <Plug>SwapItPrev :<C-U>call SwapIt('w', 1, v:count1)<CR>
+vnoremap <silent> <Plug>SwapItNext :<C-U>call SwapIt('v', 0, v:count1)<CR>
+vnoremap <silent> <Plug>SwapItPrev :<C-U>call SwapIt('v', 1, v:count1)<CR>
+if ! g:swapit_no_mappings
+  silent! nmap <silent> <unique> <C-A> <Plug>SwapItNext
+  silent! nmap <silent> <unique> <C-X> <Plug>SwapItPrev
+  silent! vmap <silent> <unique> <C-A> <Plug>SwapItNext
+  silent! vmap <silent> <unique> <C-X> <Plug>SwapItPrev
+endif
 "inoremap <silent><c-b> <esc>b"sdwi <c-r>=SwapInsert()<cr>
 "inoremap <expr> <c-b> SwapInsert()
 
